@@ -4,6 +4,7 @@ TODO add multiprocessing to hashing function
 TODO add time search functionality
 BUG if there are fields with the same name, there dup will be reported th proper amount, but it will be the same fingerprint for each row!
 NOTE In docs, remind it searches all photos in dir, so GROUP # will list dups for date range, bit not show all occurences of the dups.
+BUG total unique duplicate groups # not accurate for date range, excel prints blank groups.
 I.e., Excel won't show dups outside of the range, or if running for older date range, will search even new photos, so data might not add up to old sheet (more dups detected in newer run)
 
 Next steps: verify duplicates are accurate, and the false positive is no longer there.
@@ -131,7 +132,7 @@ def dup_to_excel(chat_history, duplicate_dict, file_hash_dict, date_range, my_wr
 
     Args:
         chat_history (str): Path to text file containig the WhatsApp chat history.
-        duplicate_dict (dict): Contains all discovered duplicates w/ k/v being <duplicate hash>:<list of duplicate photo file paths>.
+        duplicate_dict (dict): Contains all discovered duplicates w/ k/v being <duplicate hash>:<list of lists for duplicate photo file paths>.
         file_hash_dict (dict): To identify the hash for each unique absolute path for dup photos, k/v being <abs_path>:hash.
         date_range (tuple): (start, end) Date range of photos we are interested in searching for.
         my_writer (ExcelWriter): Needed for .to_excel() to know where to write. Note: the writer should already be open.
@@ -159,19 +160,16 @@ def dup_to_excel(chat_history, duplicate_dict, file_hash_dict, date_range, my_wr
     dup_total = 0 #Total of duplicate photos that exist.
 
     df = pd.DataFrame(columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH])
-    dups_list = duplicate_dict.values() #dups_list is a list of lists.
+    dups_list = duplicate_dict.values() #dups_list is a list of lists ... [["/dir/photo1", "/dir/photo1copy"], ["/dir/photo2", "/dir/photo2copy"]].
 
-    dup_total_prev = dup_total
-
-    for dup in dups_list: #dup is a list.
-        #print("Duplicate:")
-        # In this loop we are dealing with a single duplicate.
-        # if dup_total_prev 
+    for dup in dups_list: #dup is a list ... ["/dir/photo1", "/dir/photo1copy"].
+        # print("Duplicate:")
+        #In this loop we are dealing with a single duplicate.
         dup_group_total += 1
         title_row = pd.DataFrame({UPLOADER: [f"{GROUP}{dup_group_total}"], DATE: [""], TIME: [""], FILE_PATH: [""], HASH: [""]})
         df = pd.concat([df, title_row])
 
-        for photo_abs_path in dup: #photo_path is a string.
+        for photo_abs_path in dup: #photo_abs_path is a string ... "/dir/photo1".
             # print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + f"\t{photo_abs_path}")
             _, photo_file_name = os.path.split(photo_abs_path)
 
@@ -216,15 +214,15 @@ def dup_to_excel(chat_history, duplicate_dict, file_hash_dict, date_range, my_wr
                                     continue
 
 
-                        #######################################
-                        # Store into a data frame and append. #
-                        #######################################
+                        ###########################################################################################################
+                        # Store into a data frame and append to the big data frame that will be written to the Excel spreadhseet. #
+                        ###########################################################################################################
                         hash_val = file_hash_dict.get(photo_abs_path)
                         new_row = pd.DataFrame([{UPLOADER: uploader, DATE: upload_date, TIME: upload_time, FILE_PATH: photo_path, HASH: hash_val}])
                         df      = pd.concat([df, new_row])
                         dup_total += 1
                     else:
-                        print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + "[!] Regex search did not work!")
+                        print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] Regex search did not work for {line}!")
 
             #print(f"{df}")
         #print() #TODO delete this line
@@ -255,7 +253,7 @@ def find_duplicates(photos):
     """
 
     hash_dict = {} #local dict hash:photo
-    duplicate_dict = {} #ret dict hash:<list of photos>
+    duplicate_dict = {} #ret dict hash:<list of lists containing photos>
     file_hash_dict = {} #ret dict file_abs_path:hash
     duplicate_dict = defaultdict(list)
 
