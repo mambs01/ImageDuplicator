@@ -72,7 +72,7 @@ def main():
     ################################
     # Search for duplicate images. #
     ################################
-    duplicate_dict, file_hash_dict = find_duplicates(photos)
+    duplicate_dict = find_duplicates(photos)
 
     if (0 == len(duplicate_dict)):
         print(colorama.Fore.GREEN + colorama.Style.BRIGHT + "[+] No duplicates detected!")
@@ -82,7 +82,7 @@ def main():
     # Write the data to an Excel spreadhseet. #
     ###########################################
     with pd.ExcelWriter(abs_path_spreadsheet) as my_writer:
-        df = dup_to_excel(abs_path_chat_history, duplicate_dict, file_hash_dict, date_range, my_writer)
+        df = dup_to_excel(abs_path_chat_history, duplicate_dict, date_range, my_writer)
         snitch(df, my_writer)
 
     exit_program(SUCCESS)
@@ -90,149 +90,131 @@ def main():
 
 
 def snitch(group_df, my_writer):
-    """Writes data to the Excel spreadsheet for individual uploaders of duplicate photos.
-    
+    """Writes a per-person sheet to Excel for each uploader who submitted duplicate photos.
+
     Args:
-        group_df (DataFrame): Contains all relevant info on unique duplicate groups to include: names, day, time, and photo paths.
+        group_df (DataFrame): The full DataFrame returned by dup_to_excel(), containing both
+                              structural rows (GROUP headers, blank separators) and data rows.
         my_writer (ExcelWriter): Needed for .to_excel() to know where to write. Note: the writer should already be open.
     """
-    #print(group_df)
 
+    #Filter uploader names from the UPLOADER column, excluding GROUP headers and blank separators.
     uploaders = group_df[UPLOADER].unique()
-
-    #Filter out non-names from the column of names.
-    uploaders = [i for i in uploaders if GROUP not in i]
-    uploaders = [i for i in uploaders if "" != i]
+    uploaders = [u for u in uploaders if (pd.notna(u) and ("" != u) and (GROUP not in str(u)))]
 
     for name in uploaders:
-        rows = group_df[group_df[UPLOADER] == name]
-        # rows = rows.sort_values(["HASH"])
-        # print(rows)
+        rows = group_df[group_df[UPLOADER] == name].sort_values(by=[HASH])
         total_dups_uploaded = len(rows)
 
-        
-        df = pd.DataFrame(columns=[DATE, TIME, FILE_PATH, HASH, ACCOMPLICES])
-        totals_row = pd.DataFrame({DATE: [f"{name} uploaded {total_dups_uploaded} duplicates."], TIME: [""], FILE_PATH: [""], HASH: [""], ACCOMPLICES: [""]})
-        blank_row = pd.DataFrame({DATE: [""], TIME: [""], FILE_PATH: [""], HASH: [""], ACCOMPLICES: [""]})
-        df = pd.concat([df, rows])
+        blank_row  = pd.DataFrame([{DATE: "", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""}])
+        totals_row = pd.DataFrame([{DATE: f"{name} uploaded {total_dups_uploaded} duplicates.", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""}])
+        df = pd.concat([rows, blank_row, totals_row], ignore_index=True)
 
-        df = df.sort_values(by=[HASH])
-
-        df = pd.concat([df, blank_row, totals_row])
-        
-        df.to_excel(excel_writer=my_writer, sheet_name=f"{name}", columns=[DATE, TIME, FILE_PATH, HASH, ACCOMPLICES], index=False)
-
-    # print(group_df[UPLOADER].value_counts())
+        df.to_excel(excel_writer=my_writer, sheet_name=name, columns=[DATE, TIME, FILE_PATH, HASH, ACCOMPLICES], index=False)
 
 
 
-def dup_to_excel(chat_history, duplicate_dict, file_hash_dict, date_range, my_writer):
-    """Clumps together a unique duplicate group into a data frame.
-    Concatenates each group (data frame) together, and writes one large data frame to an Excel spreadsheet.
+def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
+    """Builds duplicate-group data and writes the summary sheet to Excel.
+
+    For each duplicate group detected on disk, looks up matching chat history entries
+    by filename, applies any date filter, and collects the results. Groups with no
+    chat matches (or no matches within the date range) are skipped entirely so the
+    spreadsheet never has empty GROUP rows. Accomplices are filled in per-row before
+    writing.
 
     Args:
-        chat_history (str): Path to text file containig the WhatsApp chat history.
-        duplicate_dict (dict): Contains all discovered duplicates w/ k/v being <duplicate hash>:<list of lists for duplicate photo file paths>.
-        file_hash_dict (dict): To identify the hash for each unique absolute path for dup photos, k/v being <abs_path>:hash.
-        date_range (tuple): (start, end) Date range of photos we are interested in searching for.
-        my_writer (ExcelWriter): Needed for .to_excel() to know where to write. Note: the writer should already be open.
+        chat_history (str): Absolute path to the WhatsApp chat history text file.
+        duplicate_dict (dict): k/v being <hash>:<list of abs_paths> from find_duplicates().
+        date_range (tuple | None): (start, end) pandas Timestamps, or None for no filter.
+        my_writer (ExcelWriter): Open ExcelWriter to write the summary sheet into.
 
     Returns:
-        DataFrame: Contains all relevant info on duplicates including names, day, time, and photo paths.
+        DataFrame: All data rows (plus structural header/blank rows) written to the sheet.
+                   Passed to snitch() to build per-person sheets.
     """
 
-    #########################################################
-    # Read in the chat history text and seperate by newline #
-    #########################################################
-    try:
-        with open(chat_history, "r") as file:
-            file_data = file.read()
-    except OSError as oerr:
-        print(f"[!] open({chat_history}): {oerr}")
-        exit_program(ERROR)
+    ############################################################
+    # Parse chat history once into a filename-keyed lookup.    #
+    # This replaces scanning all lines for every single photo. #
+    ############################################################
+    chat_lookup = build_chat_lookup(chat_history)
 
-    file_lines = file_data.splitlines()
+    #####################################################################
+    # For each duplicate group, collect matching chat rows, date-filter,#
+    # and skip the group entirely if nothing survives the filter.        #
+    #####################################################################
+    all_groups = []  #list of group_rows lists; only non-empty groups after filtering.
 
-    ###########################################
-    # Isolate a single duplicat to work with. #
-    ###########################################
-    dup_group_total = 0 #Total unique duplicate groups.
-    dup_total = 0 #Total of duplicate photos that exist.
+    for hash_val, abs_paths in duplicate_dict.items():
+        group_rows = []
 
-    df = pd.DataFrame(columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH])
-    dups_list = duplicate_dict.values() #dups_list is a list of lists ... [["/dir/photo1", "/dir/photo1copy"], ["/dir/photo2", "/dir/photo2copy"]].
+        for abs_path in abs_paths:
+            filename = os.path.basename(abs_path)
+            entries  = chat_lookup.get(filename, [])
 
-    for dup in dups_list: #dup is a list ... ["/dir/photo1", "/dir/photo1copy"].
-        # print("Duplicate:")
-        #In this loop we are dealing with a single duplicate.
-        dup_group_total += 1
-        title_row = pd.DataFrame({UPLOADER: [f"{GROUP}{dup_group_total}"], DATE: [""], TIME: [""], FILE_PATH: [""], HASH: [""]})
-        df = pd.concat([df, title_row])
+            if (not entries):
+                print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] {filename} not found in chat history, skipping." + colorama.Style.RESET_ALL)
+                continue
 
-        for photo_abs_path in dup: #photo_abs_path is a string ... "/dir/photo1".
-            # print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + f"\t{photo_abs_path}")
-            _, photo_file_name = os.path.split(photo_abs_path)
+            for entry in entries:
+                ###################################################################################################################
+                # Determine if the photo is in our date range, if we have one.                                                    #
+                # Note that our dict args have all photos, as we want to compare our photos in our date range against ALL photos. #
+                # I.e., the date range isn't to limit our input search, but to limit our output to the Excel spreadsheet.        #
+                ###################################################################################################################
+                if (date_range):
+                    start_date, end_date = date_range
 
-            #Find line (there should only be 1, but this will handle multipe occurences) where the file name of the dup appears.
-            for line in file_lines:
-                line = line.replace("\u202f", " ").replace("\u200e", "") #Get rid of Unicode narrow space and LTRM.
-                #Found the line where the photo was uploaded.
-                if photo_file_name in line:
-                    #print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + f"\t\t{line}")
+                    try:
+                        upload_date_formatted = pd.to_datetime(entry["date"])
+                    except (pd.errors.ParserError, ValueError) as err:
+                        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Parsing upload date failed! {err}" + colorama.Style.RESET_ALL)
+                        exit_program(ERROR)
 
-                    #######################################################
-                    # Pick apart the chat history line for relevant info. #
-                    #######################################################
-                    pattern = re.compile(r"\[(\d{1,2}/\d{1,2}/\d{2}),\s*([^\]]+)\]\s*~?\s*(.*?):.*?<attached:\s*(.*?)>")
+                    if (not (start_date <= upload_date_formatted <= end_date)):
+                        continue  #Outside the range, skip this photo.
 
-                    match = pattern.search(line)
+                group_rows.append({
+                    UPLOADER:    entry["uploader"],
+                    DATE:        entry["date"],
+                    TIME:        entry["time"],
+                    FILE_PATH:   entry["file_path"],
+                    HASH:        hash_val,
+                    ACCOMPLICES: "",  #Filled in below once we know all uploaders in this group.
+                })
 
-                    if match:
-                        upload_date = match.group(1)
-                        upload_time = match.group(2)
-                        uploader    = match.group(3)
-                        photo_path  = match.group(4)
+        if (not group_rows):
+            continue  #No chat matches or all filtered by date; skip this group entirely.
 
-                        ###################################################################################################################
-                        # Determine if the photo is in our date range, if we have one.                                                    #
-                        # Note that ouu dict args have all photos, as we want to compare our photos in our date range against ALL photos. #
-                        # I.e., the date range isn't to limit our input search, but to limit our output to the Excel spreadsheet.         #
-                        ###################################################################################################################
-                        if not date_range:
-                            pass #No date range
-                        else:
-                            start_date, end_date = date_range
+        #######################################################################################
+        # Fill ACCOMPLICES: unique other uploaders in this group, excluding the row's own  #
+        # uploader. Name-based deduplication means two distinct people with the same name  #
+        # will incorrectly collapse into one (noted in README under "Notes").              #
+        #######################################################################################
+        unique_uploaders = list(dict.fromkeys(r[UPLOADER] for r in group_rows))
+        for row in group_rows:
+            others = [u for u in unique_uploaders if (u != row[UPLOADER])]
+            row[ACCOMPLICES] = ", ".join(others)
 
-                            try:
-                                upload_date_formatted = pd.to_datetime(upload_date)
-                            except (pd.errors.ParserError, ValueError) as err:
-                                print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Parsing upload date failed! {err}" + colorama.Style.RESET_ALL)
-                                exit_program(ERROR)
-                            else:
-                                #Outside the range, do not add to dataframe that will be written to the Excel spreadsheet.
-                                if not (start_date <= upload_date_formatted <= end_date):
-                                    continue
+        all_groups.append(group_rows)
 
+    ##########################################################################
+    # Build the flat row list that becomes the "Duplicate Photos" sheet.     #
+    # Structural rows (GROUP headers and blank separators) are added here,   #
+    # only for groups that have actual data.                                  #
+    ##########################################################################
+    flat_rows = []
+    for i, group_rows in enumerate(all_groups, 1):
+        flat_rows.append({UPLOADER: f"{GROUP}{i}", DATE: "", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""})
+        flat_rows.extend(group_rows)
+        flat_rows.append({UPLOADER: "", DATE: "", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""})
+        flat_rows.append({UPLOADER: "", DATE: "", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""})
 
-                        ###########################################################################################################
-                        # Store into a data frame and append to the big data frame that will be written to the Excel spreadhseet. #
-                        ###########################################################################################################
-                        hash_val = file_hash_dict.get(photo_abs_path)
-                        new_row = pd.DataFrame([{UPLOADER: uploader, DATE: upload_date, TIME: upload_time, FILE_PATH: photo_path, HASH: hash_val}])
-                        df      = pd.concat([df, new_row])
-                        dup_total += 1
-                    else:
-                        print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] Regex search did not work for {line}!")
+    dup_group_total = len(all_groups)
+    dup_total       = sum(len(g) for g in all_groups)
 
-            #print(f"{df}")
-        #print() #TODO delete this line
-        blank_rows = pd.DataFrame({UPLOADER: ["", ""], DATE: ["", ""], TIME: ["", ""], FILE_PATH: ["", ""], HASH: ["", ""]})
-        df = pd.concat([df, blank_rows])
-
-        ############################################
-        # Write all duplicates to the spreadsheet. #
-        ############################################
-    #print(f"{df}")
+    df = pd.DataFrame(flat_rows, columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH, ACCOMPLICES])
     df.to_excel(excel_writer=my_writer, sheet_name="Duplicate Photos", columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH], index=False)
 
     print(colorama.Fore.GREEN + colorama.Style.NORMAL + f"[+] Total unique duplicate groups:   {dup_group_total}\n[+] Total duplicate photos detected: {dup_total}" + colorama.Style.RESET_ALL)
@@ -248,45 +230,66 @@ def find_duplicates(photos):
         photos (list): All photos that need to be analyzed for existence of duplicates.
 
     Returns:
-        tuple: First dict contains all discovered duplicates w/ k/v being <duplicate hash>:<list of duplicate photo file paths>.
-               Second dict contains abs_path:hash for each unique absolute path, used in dup_to_excel().
+        dict: k/v being <duplicate hash>:<list of duplicate photo file paths>.
     """
 
-    hash_dict = {} #local dict hash:photo
-    duplicate_dict = {} #ret dict hash:<list of lists containing photos>
-    file_hash_dict = {} #ret dict file_abs_path:hash
-    duplicate_dict = defaultdict(list)
+    hash_dict = {}  #local dict hash:first_seen_abs_path
+    duplicate_dict = defaultdict(list)  #ret dict hash:[abs_path, ...]
 
     for photo in photos:
         with open(photo, "rb") as f:
-            digest = hashlib.file_digest(f, "md5") #TODO use faster hash like blake3 ... using this for convenient file_digest methood.
+            digest = hashlib.file_digest(f, "md5") #TODO use faster hash like blake3 ... using this for convenient file_digest method.
             hash = digest.hexdigest()
 
-            #For use in dup_to_excel(), update this dictionary.
-            file_hash_dict[photo] = hash
-            
             #A duplicate photo is detected.
-            if hash in hash_dict:
-                #If this is the first time the duplicate is hit, update duplicate dict w/ original file too.
-                if 0 == len(duplicate_dict[hash]):
+            if (hash in hash_dict):
+                #If this is the first time the duplicate is hit, add the original file too.
+                if (0 == len(duplicate_dict[hash])):
                     duplicate_dict[hash].append(hash_dict[hash])
 
-                #Update duplicate dict w/ the duplicate.
+                #Add the duplicate.
                 duplicate_dict[hash].append(photo)
 
-            #Photo is not a duplicate; update hash dictionary with new hash.
+            #Photo is not a duplicate; store it in case a duplicate appears later.
             else:
                 hash_dict[hash] = photo
 
-    #Print out existing duplicates to terminal. #TODO delete??
-    for dup_hash in duplicate_dict.keys():
-        #print(colorama.Fore.MAGENTA + colorama.Style.BRIGHT + f"[*] Duplicate file detected {len(duplicate_dict[dup_hash])} times:")
-        for file in duplicate_dict[dup_hash]:
-            #print(f"\t{file}")
-            pass #TODO delete?
+    return duplicate_dict
 
-    #print() #TODO delete this line
-    return (duplicate_dict, file_hash_dict)
+
+
+def build_chat_lookup(chat_history_path):
+    """Parses the WhatsApp chat history file once into a filename-keyed lookup dict.
+
+    Args:
+        chat_history_path (str): Absolute path to the WhatsApp chat history text file.
+
+    Returns:
+        dict: {whatsapp_filename: [{"uploader": str, "date": str, "time": str, "file_path": str}, ...]}
+              A single filename can have multiple entries if it appears on more than one chat line.
+    """
+    try:
+        with open(chat_history_path, "r") as f:
+            file_lines = f.read().splitlines()
+    except OSError as oerr:
+        print(f"[!] open({chat_history_path}): {oerr}")
+        exit_program(ERROR)
+
+    pattern = re.compile(r"\[(\d{1,2}/\d{1,2}/\d{2}),\s*([^\]]+)\]\s*~?\s*(.*?):.*?<attached:\s*(.*?)>")
+    lookup = defaultdict(list)
+
+    for line in file_lines:
+        line = line.replace(" ", " ").replace("‎", "")  #Remove Unicode narrow space and LTRM.
+        match = pattern.search(line)
+        if match:
+            lookup[match.group(4)].append({
+                "uploader":  match.group(3),
+                "date":      match.group(1),
+                "time":      match.group(2),
+                "file_path": match.group(4),
+            })
+
+    return lookup
 
 
 
@@ -409,9 +412,15 @@ def validate_ext(spreadsheet_name):
     if (".xlsx" == ext):
         pass
     else:
-        spreadsheet_name = os.path.join(root, ".xlsx")
+        # Strip any trailing path separators before appending the extension,
+        # so that e.g. "output/" becomes "output.xlsx" not "output/.xlsx".
+        spreadsheet_name = root.rstrip(os.sep) + ".xlsx"
 
     abs_path_spreadsheet = os.path.abspath(spreadsheet_name)
+
+    if (os.path.isdir(abs_path_spreadsheet)):
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Output path is a directory, not a file: {abs_path_spreadsheet}" + colorama.Style.RESET_ALL)
+        exit_program(ERROR)
 
     print(colorama.Fore.GREEN + colorama.Style.NORMAL + f"[+] Writing spreadsheet to:             {abs_path_spreadsheet}" + colorama.Style.RESET_ALL)
 

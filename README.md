@@ -78,3 +78,12 @@ Spreadhsheet for single person:
 2. **Only when using the date range**, the total unique duplicate groups number is not accurate! Excel will prints blank groups.
       - I.e., Excel won't show duplicates outside of the range, but will print blanks.
       - The `[+] Total unique duplicate groups:` line is larger than it actually is.
+
+## Notes
+- The **ACCOMPLICES** column on per-person sheets lists the other people who uploaded the same duplicate photo. Deduplication is name-based: if two different employees happen to share the same name, they will appear as one entry in each other's ACCOMPLICES column.
+
+## WhatsApp Photo Naming Scheme
+WhatsApp assigns each uploaded photo a filename based on a sequential message number and the exact timestamp of that message, for example: `00004499-PHOTO-2024-11-13-10-14-33.jpg`. Because the timestamp is tied to the *message*, not the *photo content*, the same image uploaded twice at different times will always produce two different filenames. This means:
+
+- **True duplicate uploads are caught correctly.** If an employee sends the same photo twice, both messages get different filenames (different sequence numbers and timestamps). Both files land in the download folder with distinct names, the script finds matching hashes, and reports them as a duplicate group.
+- **Files ending in ` (1)` cannot be matched to the chat history.** The ` (1)` suffix is added by your operating system when a file with that name already exists in the download folder — it is never part of the WhatsApp filename recorded in the chat log. This can happen if the photo archive is extracted or downloaded into the same folder more than once. The script will warn `[!] filename (1).jpg not found in chat history, skipping.` for each such file and exclude it from the results. These warnings do not indicate missed duplicates; they indicate files that cannot be traced back to a specific chat message.
