@@ -2,3 +2,4 @@ duplicates.xlsx
 CLAUDE.md
 test_files/
 __pycache__
+.venv/
