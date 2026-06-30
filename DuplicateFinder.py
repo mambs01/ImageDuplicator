@@ -17,6 +17,7 @@ import argparse
 import colorama
 import filetype
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 #from PIL import Image
 from collections import defaultdict
@@ -69,13 +70,30 @@ def main():
     photos = extract_photos(abs_path_photo_folder)
 
     ###########################################################################
-    # Pre-flight: every photo must have a unique base filename across all     #
-    # subdirectories. If two files share a name, the chat history lookup      #
-    # cannot distinguish them and would produce bad data in the spreadsheet.  #
+    # Pre-flight checks — run before hashing to catch bad input early.       #
+    #                                                                         #
+    # 1. OS copy suffixes like " (1)" or "(2)" in a filename mean the photo  #
+    #    archive was downloaded more than once into the same folder. The chat #
+    #    history never records these suffixes, so affected files cannot be    #
+    #    reliably matched. Download a fresh copy of the archive and rerun.    #
+    #                                                                         #
+    # 2. Duplicate base filenames across subdirectories mean the chat history #
+    #    lookup cannot tell the two files apart, producing bad data.          #
+    #    Merge all photos into one flat folder and rerun.                     #
     ###########################################################################
+    copy_suffix    = re.compile(r"\(\d+\)\.[^.]+$")  #matches (1).jpg, (2).jpg, etc. with or without leading space.
     seen_basenames = {}
     for path in photos:
         base = os.path.basename(path)
+        # TODO uncomment for release!
+        # if (copy_suffix.search(base)):
+        #     print(colorama.Fore.RED + colorama.Style.BRIGHT +
+        #           f"[X] OS copy suffix detected in filename, e.g., (1), (2), (3):\n"
+        #           f"      {path}\n"
+        #           f"    The photo archive has been downloaded more than once into the same folder.\n"
+        #           f"    Download a fresh copy of the archive and rerun." + colorama.Style.RESET_ALL)
+        #     exit_program(ERROR)
+
         if (base in seen_basenames):
             print(colorama.Fore.RED + colorama.Style.BRIGHT +
                   f"[X] Duplicate filename detected across subdirectories:\n"
@@ -83,6 +101,7 @@ def main():
                   f"      {path}\n"
                   f"    Merge all photos into one flat folder and rerun." + colorama.Style.RESET_ALL)
             exit_program(ERROR)
+
         seen_basenames[base] = path
 
     ################################
@@ -160,9 +179,7 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
     # For each duplicate group, collect matching chat rows, date-filter,#
     # and skip the group entirely if nothing survives the filter.        #
     #####################################################################
-    all_groups    = []    #list of group_rows lists; only non-empty groups after filtering.
-    copy_suffix   = re.compile(r" \(\d+\)(\.[^.]+)$")  #matches OS copy suffixes like " (1).jpg"
-    warned_copies = False #print the fresh-download advisory only once.
+    all_groups = []  #list of group_rows lists; only non-empty groups after filtering.
 
     for hash_val, abs_paths in duplicate_dict.items():
         group_rows = []
@@ -170,24 +187,6 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
         for abs_path in abs_paths:
             filename = os.path.basename(abs_path)
             entries  = chat_lookup.get(filename, [])
-
-            #######################################################################################
-            # If the filename has an OS copy suffix (e.g. " (1).jpg"), strip it and retry.       #
-            # These suffixes appear when the photo archive is downloaded more than once into the  #
-            # same folder — the OS renames collisions rather than overwriting. The chat history   #
-            # only ever records the original WhatsApp filename (no suffix), so we must look up   #
-            # the base name to find the matching chat entry.                                      #
-            #######################################################################################
-            if (not entries and copy_suffix.search(filename)):
-                base_filename = copy_suffix.sub(r"\1", filename)
-                entries       = chat_lookup.get(base_filename, [])
-
-                if (entries and not warned_copies):
-                    print(colorama.Fore.YELLOW + colorama.Style.BRIGHT +
-                          "[!] OS copy suffixes detected in photo filenames (e.g. \"file (1).jpg\"). "
-                          "For the most accurate results, download a fresh copy of the photo archive "
-                          "so every file has its original WhatsApp filename." + colorama.Style.RESET_ALL)
-                    warned_copies = True
 
             if (not entries):
                 print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] {filename} not found in chat history, skipping." + colorama.Style.RESET_ALL)
@@ -259,6 +258,20 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
 
 
 
+def _hash_file(path):
+    """Read and MD5-hash a single file. Called in a thread pool by find_duplicates().
+
+    Args:
+        path (str): Absolute path to the file to hash.
+
+    Returns:
+        tuple: (path, hex_digest)
+    """
+    with open(path, "rb") as f:
+        return (path, hashlib.file_digest(f, "md5").hexdigest()) #TODO swap md5 for faster hash e.g. blake3.
+
+
+
 def find_duplicates(photos):
     """Finds duplicate photos in a list.
 
@@ -269,26 +282,29 @@ def find_duplicates(photos):
         dict: k/v being <duplicate hash>:<list of duplicate photo file paths>.
     """
 
-    hash_dict = {}  #local dict hash:first_seen_abs_path
-    duplicate_dict = defaultdict(list)  #ret dict hash:[abs_path, ...]
+    hash_dict      = {}               #local dict hash:first_seen_abs_path
+    duplicate_dict = defaultdict(list) #ret dict hash:[abs_path, ...]
 
-    for photo in photos:
-        with open(photo, "rb") as f:
-            digest = hashlib.file_digest(f, "md5") #TODO use faster hash like blake3 ... using this for convenient file_digest method.
-            hash = digest.hexdigest()
+    #Phase 1 — hash every file in parallel.
+    #File I/O and hashlib both release the GIL, so threads genuinely overlap.
+    with ThreadPoolExecutor() as executor:
+        futures = [executor.submit(_hash_file, p) for p in photos]
+        results = [f.result() for f in as_completed(futures)]
 
-            #A duplicate photo is detected.
-            if (hash in hash_dict):
-                #If this is the first time the duplicate is hit, add the original file too.
-                if (0 == len(duplicate_dict[hash])):
-                    duplicate_dict[hash].append(hash_dict[hash])
+    #Phase 2 — build duplicate dict sequentially from the collected (path, hash) pairs.
+    #Pure dict operations on strings; no I/O, no benefit from threading.
+    for path, hash_val in results:
+        if (hash_val in hash_dict):
+            #If this is the first time the duplicate is hit, add the original file too.
+            if (0 == len(duplicate_dict[hash_val])):
+                duplicate_dict[hash_val].append(hash_dict[hash_val])
 
-                #Add the duplicate.
-                duplicate_dict[hash].append(photo)
+            #Add the duplicate.
+            duplicate_dict[hash_val].append(path)
 
-            #Photo is not a duplicate; store it in case a duplicate appears later.
-            else:
-                hash_dict[hash] = photo
+        #Photo is not a duplicate; store it in case a duplicate appears later.
+        else:
+            hash_dict[hash_val] = path
 
     return duplicate_dict
 
