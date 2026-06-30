@@ -2,11 +2,11 @@
 Web GUI for DuplicateFinder.py.
 
 Usage:
-    python app.py
-    Opens automatically in your browser at http://127.0.0.1:5001
+    python src/app.py
+    Opens automatically in your browser.
 
 The CLI is still fully usable:
-    python DuplicateFinder.py -p <photos> -c <chat> -o <output> [-s <start> -e <end>]
+    python src/DuplicateFinder.py -p <photos> -c <chat> -o <output> [-s <start> -e <end>]
 """
 
 import json
@@ -157,7 +157,6 @@ def run_script():
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    # port=0 asks the OS for any free port — guaranteed no conflicts.
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(('127.0.0.1', 0))
     port = sock.getsockname()[1]

@@ -86,7 +86,7 @@ echo ""
 echo "    Your browser will open automatically."
 echo "    Close this window (or press Ctrl+C) to stop the program."
 echo ""
-python app.py
+python src/app.py
 EXIT_CODE=$?
 
 # Exit code 130 = Ctrl+C (normal shutdown) — don't treat that as an error.

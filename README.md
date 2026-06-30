@@ -97,9 +97,11 @@ WhatsApp assigns each uploaded photo a filename based on a sequential message nu
 
 Todo:
 - web gui (open file explorer)
-- read me
-- break into seperate files
 - make/auto-install dependencies
+- break into seperate files
+
+- move hash to way left
 - audit code and verify results
+- read me
 - parse todos
 - update comments
