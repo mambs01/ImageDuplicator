@@ -23,7 +23,7 @@ from flask import Flask, Response, jsonify, render_template, request
 
 app = Flask(__name__)
 
-ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')
+ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*m')  # matches ANSI terminal color codes, e.g. \x1b[32m (green) or \x1b[0m (reset)
 
 
 # ── Native file / folder pickers ─────────────────────────────────────────────

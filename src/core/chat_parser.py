@@ -17,14 +17,13 @@ def build_chat_lookup(chat_history_path):
         with open(chat_history_path, "r") as f:
             file_lines = f.read().splitlines()
     except OSError as oerr:
-        print(colorama.Fore.RED + colorama.Style.BRIGHT +
-              f"[X] Could not open chat history: {oerr}" +
-              colorama.Style.RESET_ALL)
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Could not open chat history: {oerr}" + colorama.Style.RESET_ALL)
         raise SystemExit(1)
 
-    pattern = re.compile(
-        r"\[(\d{1,2}/\d{1,2}/\d{2}),\s*([^\]]+)\]\s*~?\s*(.*?):.*?<attached:\s*(.*?)>"
-    )
+    # Matches WhatsApp message lines that contain an attachment, e.g.:
+    # [4/30/24, 3:45 PM] ~John Smith: text <attached: IMG_001.jpg>
+    # Group 1: date  Group 2: time  Group 3: sender name  Group 4: attached filename
+    pattern = re.compile(r"\[(\d{1,2}/\d{1,2}/\d{2}),\s*([^\]]+)\]\s*~?\s*(.*?):.*?<attached:\s*(.*?)>")
     lookup = defaultdict(list)
 
     for line in file_lines:

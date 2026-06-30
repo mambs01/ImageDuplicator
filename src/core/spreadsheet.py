@@ -4,8 +4,7 @@ import colorama
 import pandas as pd
 
 from core.chat_parser import build_chat_lookup
-from core.constants import (ACCOMPLICES, DATE, FILE_PATH, GROUP, HASH, TIME,
-                             UPLOADER)
+from core.constants import ACCOMPLICES, DATE, FILE_PATH, GROUP, HASH, TIME, UPLOADER
 
 
 def snitch(group_df, my_writer):
@@ -22,11 +21,9 @@ def snitch(group_df, my_writer):
         rows      = group_df[group_df[UPLOADER] == name].sort_values(by=[HASH])
         total     = len(rows)
         blank_row = pd.DataFrame([{DATE: "", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""}])
-        total_row = pd.DataFrame([{DATE: f"{name} uploaded {total} duplicates.",
-                                   TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""}])
+        total_row = pd.DataFrame([{DATE: f"{name} uploaded {total} duplicates.", TIME: "", FILE_PATH: "", HASH: "", ACCOMPLICES: ""}])
         df = pd.concat([rows, blank_row, total_row], ignore_index=True)
-        df.to_excel(excel_writer=my_writer, sheet_name=name,
-                    columns=[DATE, TIME, FILE_PATH, HASH, ACCOMPLICES], index=False)
+        df.to_excel(excel_writer=my_writer, sheet_name=name, columns=[DATE, TIME, FILE_PATH, ACCOMPLICES, HASH], index=False)
 
 
 def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
@@ -56,9 +53,7 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
             entries  = chat_lookup.get(filename, [])
 
             if not entries:
-                print(colorama.Fore.YELLOW + colorama.Style.BRIGHT +
-                      f"[!] {filename} not found in chat history, skipping." +
-                      colorama.Style.RESET_ALL)
+                print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] {filename} not found in chat history, skipping." + colorama.Style.RESET_ALL)
                 continue
 
             for entry in entries:
@@ -67,9 +62,7 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
                     try:
                         upload_date = pd.to_datetime(entry["date"])
                     except (pd.errors.ParserError, ValueError) as err:
-                        print(colorama.Fore.RED + colorama.Style.BRIGHT +
-                              f"[X] Parsing upload date failed! {err}" +
-                              colorama.Style.RESET_ALL)
+                        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Parsing upload date failed! {err}" + colorama.Style.RESET_ALL)
                         raise SystemExit(1)
 
                     if not (start_date <= upload_date <= end_date):
@@ -105,12 +98,8 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
     dup_total       = sum(len(g) for g in all_groups)
 
     df = pd.DataFrame(flat_rows, columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH, ACCOMPLICES])
-    df.to_excel(excel_writer=my_writer, sheet_name="Duplicate Photos",
-                columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH], index=False)
+    df.to_excel(excel_writer=my_writer, sheet_name="Duplicate Photos", columns=[UPLOADER, DATE, TIME, FILE_PATH, HASH], index=False)
 
-    print(colorama.Fore.GREEN + colorama.Style.NORMAL +
-          f"[+] Total unique duplicate groups:   {dup_group_total}\n"
-          f"[+] Total duplicate photos detected: {dup_total}" +
-          colorama.Style.RESET_ALL)
+    print(colorama.Fore.GREEN + colorama.Style.NORMAL + f"[+] Total unique duplicate groups:   {dup_group_total}\n[+] Total duplicate photos detected: {dup_total}" + colorama.Style.RESET_ALL)
 
     return df

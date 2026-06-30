@@ -3,13 +3,6 @@ DuplicateFinder — CLI entry point.
 
 Usage:
     python src/DuplicateFinder.py -p <photos> -c <chat> -o <output> [-s <start> -e <end>]
-
-TODO delete unnecessary prints and dead code
-TODO add time search functionality
-NOTE In docs, remind it searches all photos in dir, so GROUP # will list dups for date range,
-     but not show all occurrences of the dups.
-BUG Excel won't show dups outside of the range, or if running for older date range, will search
-    even new photos, so data might not add up to old sheet (more dups detected in newer run)
 """
 
 import argparse
@@ -28,10 +21,7 @@ def main():
     ################################################################
     # Get command line arguments and verify input.                 #
     ################################################################
-    parser = argparse.ArgumentParser(
-        description="Searches for duplicate images and writes an Excel report.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
+    parser = argparse.ArgumentParser(description="Searches for duplicate images and writes an Excel report.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-p', '--photos',     default=os.getcwd(),              type=str, metavar="<path>", help="Folder containing photos to search.")
     parser.add_argument('-c', '--chathistory',default="chat_history_full.txt",  type=str, metavar="<path>", help="WhatsApp chat history .txt file.")
     parser.add_argument('-o', '--output',     default="duplicates.xlsx",        type=str, metavar="<path>", help="Output Excel spreadsheet path/name.")
@@ -64,24 +54,17 @@ def main():
     #    lookup cannot tell the two files apart. Merge into one flat folder    #
     #    and rerun.                                                            #
     ###########################################################################
-    copy_suffix    = re.compile(r"\(\d+\)\.[^.]+$")
+    copy_suffix    = re.compile(r"\(\d+\)\.[^.]+$")  # matches OS copy suffixes at end of filename, e.g. (1).jpg or (2).png
     seen_basenames = {}
     for path in photos:
         base = os.path.basename(path)
         # TODO uncomment for release!
         # if copy_suffix.search(base):
-        #     print(colorama.Fore.RED + colorama.Style.BRIGHT +
-        #           f"[X] OS copy suffix detected: {path}\n"
-        #           f"    Download a fresh copy and rerun." + colorama.Style.RESET_ALL)
+        #     print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] OS copy suffix detected: {path}\n    Download a fresh copy and rerun." + colorama.Style.RESET_ALL)
         #     exit_program(ERROR)
 
         if base in seen_basenames:
-            print(colorama.Fore.RED + colorama.Style.BRIGHT +
-                  f"[X] Duplicate filename across subdirectories:\n"
-                  f"      {seen_basenames[base]}\n"
-                  f"      {path}\n"
-                  f"    Merge all photos into one flat folder and rerun." +
-                  colorama.Style.RESET_ALL)
+            print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Duplicate filename across subdirectories:\n      {seen_basenames[base]}\n      {path}\n    Merge all photos into one flat folder and rerun." + colorama.Style.RESET_ALL)
             exit_program(ERROR)
 
         seen_basenames[base] = path
@@ -112,9 +95,7 @@ def validate_dates(start_day, end_day):
         tuple | None: (start, end) pandas Timestamps, or None if no range given.
     """
     if not start_day and not end_day:
-        print(colorama.Fore.GREEN + colorama.Style.NORMAL +
-              "[+] No date range detected, searching all photos." +
-              colorama.Style.RESET_ALL)
+        print(colorama.Fore.GREEN + colorama.Style.NORMAL + "[+] No date range detected, searching all photos." + colorama.Style.RESET_ALL)
         return None
 
     if start_day and end_day:
@@ -122,19 +103,13 @@ def validate_dates(start_day, end_day):
             start = pd.to_datetime(start_day)
             end   = pd.to_datetime(end_day)
         except (pd.errors.ParserError, ValueError) as err:
-            print(colorama.Fore.RED + colorama.Style.BRIGHT +
-                  f"[X] Parsing start/end dates failed. Enter in MM/DD/YY format. {err}" +
-                  colorama.Style.RESET_ALL)
+            print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Parsing start/end dates failed. Enter in MM/DD/YY format. {err}" + colorama.Style.RESET_ALL)
             exit_program(ERROR)
         else:
-            print(colorama.Fore.GREEN + colorama.Style.NORMAL +
-                  f"[+] Searching photos from {start} to {end}" +
-                  colorama.Style.RESET_ALL)
+            print(colorama.Fore.GREEN + colorama.Style.NORMAL + f"[+] Searching photos from {start} to {end}" + colorama.Style.RESET_ALL)
             return (start, end)
 
-    print(colorama.Fore.RED + colorama.Style.BRIGHT +
-          "[X] Must use both -s and -e together. Use -h for help." +
-          colorama.Style.RESET_ALL)
+    print(colorama.Fore.RED + colorama.Style.BRIGHT + "[X] Must use both -s and -e together. Use -h for help." + colorama.Style.RESET_ALL)
     exit_program(ERROR)
 
 
@@ -148,18 +123,13 @@ def validate_paths(photo_folder, chat_history):
     chat_history_abs = os.path.abspath(chat_history)
 
     if not os.path.isdir(photo_folder_abs):
-        print(colorama.Fore.RED + colorama.Style.BRIGHT +
-              f"[X] {photo_folder_abs} does not exist!")
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] {photo_folder_abs} does not exist!")
         exit_program(ERROR)
     elif not os.path.isfile(chat_history_abs):
-        print(colorama.Fore.RED + colorama.Style.BRIGHT +
-              f"[X] {chat_history_abs} does not exist!")
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] {chat_history_abs} does not exist!")
         exit_program(ERROR)
     else:
-        print(colorama.Fore.GREEN +
-              f"[+] Using photos located in:            {photo_folder_abs}\n"
-              f"[+] Using chat history file located at: {chat_history_abs}" +
-              colorama.Style.RESET_ALL)
+        print(colorama.Fore.GREEN + f"[+] Using photos located in:            {photo_folder_abs}\n[+] Using chat history file located at: {chat_history_abs}" + colorama.Style.RESET_ALL)
 
     return (photo_folder_abs, chat_history_abs)
 
@@ -178,21 +148,17 @@ def validate_ext(spreadsheet_name):
     abs_path = os.path.abspath(spreadsheet_name)
 
     if os.path.isdir(abs_path):
-        print(colorama.Fore.RED + colorama.Style.BRIGHT +
-              f"[X] Output path is a directory, not a file: {abs_path}" +
-              colorama.Style.RESET_ALL)
+        print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Output path is a directory, not a file: {abs_path}" + colorama.Style.RESET_ALL)
         exit_program(ERROR)
 
-    print(colorama.Fore.GREEN + colorama.Style.NORMAL +
-          f"[+] Writing spreadsheet to:             {abs_path}" +
-          colorama.Style.RESET_ALL)
+    print(colorama.Fore.GREEN + colorama.Style.NORMAL + f"[+] Writing spreadsheet to:             {abs_path}" + colorama.Style.RESET_ALL)
 
     return abs_path
 
 
 def exit_program(exit_val):
     """Print goodbye message and exit."""
-    print(colorama.Fore.GREEN + "[+] Exiting script, goodbye!" + colorama.Style.RESET_ALL)
+    print(colorama.Fore.GREEN + "[+] Exiting program, goodbye!" + colorama.Style.RESET_ALL)
     raise SystemExit(exit_val)
 
 

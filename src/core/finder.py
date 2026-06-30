@@ -57,9 +57,7 @@ def extract_photos(photo_folder):
             try:
                 is_image = filetype.is_image(file_abs_path)
             except (TypeError, IsADirectoryError) as err:
-                print(colorama.Fore.YELLOW + colorama.Style.BRIGHT +
-                      f"[!] Filetype for {file_abs_path} not supported! {err}" +
-                      colorama.Style.RESET_ALL)
+                print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] Filetype for {file_abs_path} not supported! {err}" + colorama.Style.RESET_ALL)
             else:
                 if is_image:
                     photos.append(file_abs_path)
