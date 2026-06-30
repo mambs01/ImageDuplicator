@@ -58,10 +58,9 @@ def main():
     seen_basenames = {}
     for path in photos:
         base = os.path.basename(path)
-        # TODO uncomment for release!
-        # if copy_suffix.search(base):
-        #     print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] OS copy suffix detected: {path}\n    Download a fresh copy and rerun." + colorama.Style.RESET_ALL)
-        #     exit_program(ERROR)
+        if copy_suffix.search(base):
+            print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] OS copy suffix detected: {path}\n    Download a fresh copy and rerun." + colorama.Style.RESET_ALL)
+            exit_program(ERROR)
 
         if base in seen_basenames:
             print(colorama.Fore.RED + colorama.Style.BRIGHT + f"[X] Duplicate filename across subdirectories:\n      {seen_basenames[base]}\n      {path}\n    Merge all photos into one flat folder and rerun." + colorama.Style.RESET_ALL)
