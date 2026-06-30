@@ -87,3 +87,9 @@ WhatsApp assigns each uploaded photo a filename based on a sequential message nu
 
 - **True duplicate uploads are caught correctly.** If an employee sends the same photo twice, both messages get different filenames (different sequence numbers and timestamps). Both files land in the download folder with distinct names, the script finds matching hashes, and reports them as a duplicate group.
 - **Files ending in ` (1)` cannot be matched to the chat history.** The ` (1)` suffix is added by your operating system when a file with that name already exists in the download folder — it is never part of the WhatsApp filename recorded in the chat log. This can happen if the photo archive is extracted or downloaded into the same folder more than once. The script will warn `[!] filename (1).jpg not found in chat history, skipping.` for each such file and exclude it from the results. These warnings do not indicate missed duplicates; they indicate files that cannot be traced back to a specific chat message.
+
+
+
+### Notes:
+- Originally phyl has dup groups even for a single photo! Likely do to mishandling of photos by the downloader causing (1) issues.
+- The program will treat similar usernames as different people (e.g. bob_smith & bob_smith1 are seperate people)

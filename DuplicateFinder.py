@@ -67,7 +67,23 @@ def main():
     # Filter out non image files; don't waste time on non-image files. #
     ####################################################################
     photos = extract_photos(abs_path_photo_folder)
-    #print(len(photos))
+
+    ###########################################################################
+    # Pre-flight: every photo must have a unique base filename across all     #
+    # subdirectories. If two files share a name, the chat history lookup      #
+    # cannot distinguish them and would produce bad data in the spreadsheet.  #
+    ###########################################################################
+    seen_basenames = {}
+    for path in photos:
+        base = os.path.basename(path)
+        if (base in seen_basenames):
+            print(colorama.Fore.RED + colorama.Style.BRIGHT +
+                  f"[X] Duplicate filename detected across subdirectories:\n"
+                  f"      {seen_basenames[base]}\n"
+                  f"      {path}\n"
+                  f"    Merge all photos into one flat folder and rerun." + colorama.Style.RESET_ALL)
+            exit_program(ERROR)
+        seen_basenames[base] = path
 
     ################################
     # Search for duplicate images. #
@@ -144,7 +160,9 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
     # For each duplicate group, collect matching chat rows, date-filter,#
     # and skip the group entirely if nothing survives the filter.        #
     #####################################################################
-    all_groups = []  #list of group_rows lists; only non-empty groups after filtering.
+    all_groups    = []    #list of group_rows lists; only non-empty groups after filtering.
+    copy_suffix   = re.compile(r" \(\d+\)(\.[^.]+)$")  #matches OS copy suffixes like " (1).jpg"
+    warned_copies = False #print the fresh-download advisory only once.
 
     for hash_val, abs_paths in duplicate_dict.items():
         group_rows = []
@@ -152,6 +170,24 @@ def dup_to_excel(chat_history, duplicate_dict, date_range, my_writer):
         for abs_path in abs_paths:
             filename = os.path.basename(abs_path)
             entries  = chat_lookup.get(filename, [])
+
+            #######################################################################################
+            # If the filename has an OS copy suffix (e.g. " (1).jpg"), strip it and retry.       #
+            # These suffixes appear when the photo archive is downloaded more than once into the  #
+            # same folder — the OS renames collisions rather than overwriting. The chat history   #
+            # only ever records the original WhatsApp filename (no suffix), so we must look up   #
+            # the base name to find the matching chat entry.                                      #
+            #######################################################################################
+            if (not entries and copy_suffix.search(filename)):
+                base_filename = copy_suffix.sub(r"\1", filename)
+                entries       = chat_lookup.get(base_filename, [])
+
+                if (entries and not warned_copies):
+                    print(colorama.Fore.YELLOW + colorama.Style.BRIGHT +
+                          "[!] OS copy suffixes detected in photo filenames (e.g. \"file (1).jpg\"). "
+                          "For the most accurate results, download a fresh copy of the photo archive "
+                          "so every file has its original WhatsApp filename." + colorama.Style.RESET_ALL)
+                    warned_copies = True
 
             if (not entries):
                 print(colorama.Fore.YELLOW + colorama.Style.BRIGHT + f"[!] {filename} not found in chat history, skipping." + colorama.Style.RESET_ALL)
