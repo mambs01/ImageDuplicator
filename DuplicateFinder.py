@@ -7,6 +7,8 @@ NOTE In docs, remind it searches all photos in dir, so GROUP # will list dups fo
 BUG total unique duplicate groups # not accurate for date range, excel prints blank groups.
 I.e., Excel won't show dups outside of the range, or if running for older date range, will search even new photos, so data might not add up to old sheet (more dups detected in newer run)
 
+Everything in one Python file to be easier to share.
+
 Next steps: verify duplicates are accurate, and the false positive is no longer there.
 What should the Excel sheet look like... how much info is too much?
 """
@@ -268,7 +270,7 @@ def _hash_file(path):
         tuple: (path, hex_digest)
     """
     with open(path, "rb") as f:
-        return (path, hashlib.file_digest(f, "md5").hexdigest()) #TODO swap md5 for faster hash e.g. blake3.
+        return (path, hashlib.file_digest(f, "blake2b").hexdigest())
 
 
 
