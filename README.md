@@ -93,3 +93,13 @@ WhatsApp assigns each uploaded photo a filename based on a sequential message nu
 ### Notes:
 - Originally phyl has dup groups even for a single photo! Likely do to mishandling of photos by the downloader causing (1) issues.
 - The program will treat similar usernames as different people (e.g. bob_smith & bob_smith1 are seperate people)
+
+
+Todo:
+- web gui (open file explorer)
+- read me
+- break into seperate files
+- make/auto-install dependencies
+- audit code and verify results
+- parse todos
+- update comments
