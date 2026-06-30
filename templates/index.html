@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ImageDuplicator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 40px 44px 44px;
+      width: 100%;
+      max-width: 620px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04);
+    }
+
+    .card-header { margin-bottom: 32px; }
+    .card-header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .card-header p  { margin-top: 4px; font-size: 13.5px; color: #6e6e73; }
+
+    .field { margin-bottom: 22px; }
+
+    label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 7px;
+    }
+    label .opt { font-weight: 400; text-transform: none; letter-spacing: 0; color: #aeaeb2; }
+
+    .row { display: flex; gap: 8px; }
+
+    input[type="text"] {
+      flex: 1;
+      min-width: 0;
+      padding: 9px 13px;
+      border: 1.5px solid #d2d2d7;
+      border-radius: 9px;
+      font-size: 13.5px;
+      font-family: inherit;
+      color: #1d1d1f;
+      background: #fafafa;
+      outline: none;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    input[type="text"]:focus {
+      border-color: #0071e3;
+      background: #fff;
+    }
+    input[type="text"]::placeholder { color: #b0b0b8; }
+    input[readonly] { cursor: default; }
+
+    .browse-btn {
+      flex-shrink: 0;
+      padding: 9px 15px;
+      background: #f5f5f7;
+      border: 1.5px solid #d2d2d7;
+      border-radius: 9px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #1d1d1f;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s;
+    }
+    .browse-btn:hover    { background: #e8e8ed; }
+    .browse-btn:active   { background: #dcdce0; }
+    .browse-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .date-row { display: flex; gap: 10px; align-items: center; }
+    .date-row span { font-size: 13px; color: #8e8e93; flex-shrink: 0; }
+
+    hr { border: none; border-top: 1px solid #f0f0f5; margin: 28px 0; }
+
+    .run-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 13px;
+      background: #0071e3;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .run-btn:hover    { background: #0077ed; }
+    .run-btn:active   { background: #006edb; }
+    .run-btn:disabled { background: #aeaeb2; cursor: not-allowed; }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2.5px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Console */
+    .console-wrap { margin-top: 24px; display: none; }
+    .console-wrap.visible { display: block; }
+
+    .console-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #8e8e93;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+    }
+
+    .console {
+      background: #1c1c1e;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-family: "SF Mono", "Menlo", "Monaco", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.65;
+      min-height: 60px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .log-default { color: #e5e5ea; }
+    .log-success { color: #32d74b; }
+    .log-warn    { color: #ffd60a; }
+    .log-error   { color: #ff453a; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="card-header">
+    <h1>ImageDuplicator</h1>
+    <p>Detect exact duplicate photos and export an Excel report.</p>
+  </div>
+
+  <!-- Photos folder -->
+  <div class="field">
+    <label>Photos Folder</label>
+    <div class="row">
+      <input type="text" id="photos" placeholder="Select the folder containing photos…" readonly>
+      <button class="browse-btn" id="btnPhotos"
+              onclick="browse('directory', 'photos', 'Select Photos Folder')">Browse…</button>
+    </div>
+  </div>
+
+  <!-- Chat history file -->
+  <div class="field">
+    <label>Chat History File</label>
+    <div class="row">
+      <input type="text" id="chat" placeholder="Select the WhatsApp chat history .txt file…" readonly>
+      <button class="browse-btn" id="btnChat"
+              onclick="browse('file', 'chat', 'Select Chat History File')">Browse…</button>
+    </div>
+  </div>
+
+  <!-- Output folder -->
+  <div class="field">
+    <label>Output Folder</label>
+    <div class="row">
+      <input type="text" id="outdir" placeholder="Select where to save the spreadsheet…" readonly>
+      <button class="browse-btn" id="btnOutdir"
+              onclick="browse('directory', 'outdir', 'Select Output Folder')">Browse…</button>
+    </div>
+  </div>
+
+  <!-- Spreadsheet name -->
+  <div class="field">
+    <label>Spreadsheet Name</label>
+    <input type="text" id="output" value="duplicates.xlsx" style="width:100%">
+  </div>
+
+  <hr>
+
+  <!-- Date range -->
+  <div class="field">
+    <label>Date Range <span class="opt">&nbsp;— optional</span></label>
+    <div class="date-row">
+      <input type="text" id="start" placeholder="MM/DD/YY" style="max-width:120px">
+      <span>to</span>
+      <input type="text" id="end" placeholder="MM/DD/YY" style="max-width:120px">
+    </div>
+  </div>
+
+  <!-- Run button -->
+  <button class="run-btn" id="runBtn" onclick="runScript()">
+    <div class="spinner" id="spinner"></div>
+    <span id="runLabel">Run</span>
+  </button>
+
+  <!-- Console output -->
+  <div class="console-wrap" id="consoleWrap">
+    <div class="console-label">Output</div>
+    <div class="console" id="console"></div>
+  </div>
+
+</div>
+
+<script>
+  // ── Browse helper ──────────────────────────────────────────────────────────
+  async function browse(type, fieldId, title) {
+    const endpoint = type === 'directory' ? '/browse/directory' : '/browse/file';
+    setBrowseEnabled(false);
+    try {
+      const res  = await fetch(`${endpoint}?title=${encodeURIComponent(title)}`);
+      const data = await res.json();
+      if (data.path) document.getElementById(fieldId).value = data.path;
+    } catch (e) {
+      appendLine('[X] Could not open file picker: ' + e);
+    } finally {
+      setBrowseEnabled(true);
+    }
+  }
+
+  function setBrowseEnabled(enabled) {
+    ['btnPhotos','btnChat','btnOutdir'].forEach(id => {
+      document.getElementById(id).disabled = !enabled;
+    });
+  }
+
+  // ── Console helpers ────────────────────────────────────────────────────────
+  function appendLine(text) {
+    const wrap = document.getElementById('consoleWrap');
+    const box  = document.getElementById('console');
+    wrap.classList.add('visible');
+
+    const div = document.createElement('div');
+    if      (text.startsWith('[+]')) div.className = 'log-success';
+    else if (text.startsWith('[!]')) div.className = 'log-warn';
+    else if (text.startsWith('[X]')) div.className = 'log-error';
+    else                             div.className = 'log-default';
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // ── Run ────────────────────────────────────────────────────────────────────
+  function runScript() {
+    const photos = document.getElementById('photos').value.trim();
+    const chat   = document.getElementById('chat').value.trim();
+    const outdir = document.getElementById('outdir').value.trim();
+    const output = document.getElementById('output').value.trim() || 'duplicates.xlsx';
+    const start  = document.getElementById('start').value.trim();
+    const end    = document.getElementById('end').value.trim();
+
+    if (!photos) { alert('Please select a Photos Folder.'); return; }
+    if (!chat)   { alert('Please select a Chat History File.'); return; }
+
+    if ((start && !end) || (!start && end)) {
+      alert('Please enter both a start date and an end date, or leave both empty.');
+      return;
+    }
+
+    // Clear console
+    document.getElementById('console').innerHTML = '';
+    document.getElementById('consoleWrap').classList.add('visible');
+
+    setRunning(true);
+
+    const params = new URLSearchParams({ photos, chat, outdir, output, start, end });
+    const src    = new EventSource('/run?' + params);
+
+    src.onmessage = e => {
+      const data = JSON.parse(e.data);
+      if (data.line) appendLine(data.line);
+      if (data.done) {
+        src.close();
+        setRunning(false);
+      }
+    };
+
+    src.onerror = () => {
+      src.close();
+      setRunning(false);
+    };
+  }
+
+  function setRunning(running) {
+    document.getElementById('runBtn').disabled    = running;
+    document.getElementById('spinner').style.display = running ? 'block' : 'none';
+    document.getElementById('runLabel').textContent  = running ? 'Running…' : 'Run';
+    setBrowseEnabled(!running);
+  }
+</script>
+</body>
+</html>

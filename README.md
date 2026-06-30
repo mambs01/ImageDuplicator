@@ -1,5 +1,5 @@
 # Duplicate Finder
-*Duplicatefinder.py* is a Python 3 script that will detect **EXACT** duplicate photos and output a Microsoft Excel spreadsheet with relevant information on the duplicates.
+*Duplicatefinder.py* is a Python 3 script that will detect **EXACT** duplicate photos and output an Excel spreadsheet that lists all groups of duplicate photos, and a spreadsheet for each offender who uploaded duplicates.
 
 Specifically, this script will recursively search a folder and find all image files. The script will then md5 hash every image it found. Md5 is a cryptographic hash, which means that even the slightest change to the photo will alter the hash. **I.e., if a duplicate photo is even slightly modified (cropped, filtered, digital paint mark, etc.) it will not register as a duplicate! The tradeoff is that it is easier to submit duplicate photos, but we can guarantee that the duplicates being reported are accurate.**
 

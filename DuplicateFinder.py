@@ -1,11 +1,9 @@
+
 """Python module that searches for duplicate images. Prints all duplicates to terminal.
 TODO delete unnecessary prints and dead code
-TODO add multiprocessing to hashing function
 TODO add time search functionality
-BUG if there are fields with the same name, there dup will be reported th proper amount, but it will be the same fingerprint for each row!
 NOTE In docs, remind it searches all photos in dir, so GROUP # will list dups for date range, bit not show all occurences of the dups.
-BUG total unique duplicate groups # not accurate for date range, excel prints blank groups.
-I.e., Excel won't show dups outside of the range, or if running for older date range, will search even new photos, so data might not add up to old sheet (more dups detected in newer run)
+BUG Excel won't show dups outside of the range, or if running for older date range, will search even new photos, so data might not add up to old sheet (more dups detected in newer run)
 
 Everything in one Python file to be easier to share.
 
